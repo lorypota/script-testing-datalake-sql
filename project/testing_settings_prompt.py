@@ -1,4 +1,6 @@
 from InquirerPy import prompt
+from datetime import datetime, timedelta
+
 
 def select_data_source():
   data_source_options = [
@@ -22,6 +24,7 @@ def select_data_source():
   selected_data_source = prompt(data_source_options)['data_source']
   return selected_data_source
 
+
 def select_testing_option(data_source):
   testing_options = [
     {
@@ -36,6 +39,10 @@ def select_testing_option(data_source):
         {
           'name': f'Check that all data in {data_source} correspond to the other data source',
           'value': 'all_data'
+        },
+        {
+          'name': f'Check that the primary keys in {data_source} have no duplicates',
+          'value': 'no_duplicates'
         }
       ]
     }
@@ -43,6 +50,7 @@ def select_testing_option(data_source):
 
   selected_option = prompt(testing_options)['testing_option']
   return selected_option
+
 
 def select_rows_number():
   testing_options = [

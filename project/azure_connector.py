@@ -1,10 +1,11 @@
 from azure.storage.filedatalake import DataLakeServiceClient
 from azure.core.exceptions import HttpResponseError
 from dotenv import load_dotenv
-from InquirerPy import prompt
+from InquirerPy import inquirer
 from tqdm import tqdm
 import os
 import shutil
+from datetime import datetime, timedelta
 
 class DataLakeExplorer:
   def __init__(self):
@@ -33,24 +34,50 @@ class DataLakeExplorer:
       choices = [path.name for path in folder_paths if path.is_directory and path.name.count('/') == level]
     else:
       choices = [path.name for path in folder_paths if not path.is_directory and path.name.count('/') == level]
-    
-    questions = [
-      {
-        'type': type,
-        'message': message,
-        'name': 'selected_folder',
-        'choices': choices,
+
+    if type == 'checkbox':
+      keybindings = {
+        "toggle-all": [{"key": ["c-a"]}],
       }
-    ]
-    selected_folder = prompt(questions)['selected_folder']
+      selected_folder = inquirer.checkbox(
+        message=message,
+        choices=choices,
+        keybindings=keybindings
+      ).execute()
+    elif type == 'list':
+      selected_folder = inquirer.select(
+        message=message,
+        choices=choices
+      ).execute()
+
     return selected_folder
 
   def select_table_data(self):
     selected_table = self.select_folder(None, 0, 'Select table:')
     selected_year = self.select_folder(selected_table, 1, 'Select year:')
-    selected_month = self.select_folder(selected_year, 2, 'Select month:')
-    selected_days = self.select_folder(selected_month, 3, 'Select days (press space to select, enter to continue): ', 'checkbox', False)
-    return selected_table, selected_year, selected_month, selected_days
+    selected_months = self.select_folder(selected_year, 2, 'Select months (press space to select, enter to continue, ctrl-a to select all): ', 'checkbox')
+    
+    if len(selected_months) == 1:
+      selected_days = self.select_folder(selected_months[0], 3, f'Select days for {selected_months[0]}, (press space to select, enter to continue, ctrl-a to select all): ', 'checkbox', False)
+    elif len(selected_months) >= 1:
+      starting_day = self.select_folder(selected_months[0], 3, f'Select starting day for month {selected_months[0]}', selecting_folders=False)
+
+      ending_day = self.select_folder(selected_months[len(selected_months) - 1], 3, f'Select ending day for month {selected_months[len(selected_months) - 1]}', selecting_folders=False)
+
+      start_date_str = starting_day.split('/')[-3: starting_day.rfind(".")]
+      end_date_str = ending_day.split('/')[-3: starting_day.rfind(".")]
+
+      start_date = datetime(int(start_date_str[0]), int(start_date_str[1]), int(start_date_str[2][:start_date_str[2].rfind(".")]))
+      end_date = datetime(int(end_date_str[0]), int(end_date_str[1]), int(end_date_str[2][:end_date_str[2].rfind(".")]))
+
+      selected_days = []
+      current_date = start_date
+      while current_date <= end_date:
+        file_path = f"{selected_table}/{selected_year}/{current_date.month:02d}/{current_date.day:02d}.parquet"
+        selected_days.append(file_path)
+        current_date += timedelta(days=1)
+
+    return selected_table, selected_year, selected_months, selected_days
   
   def download_selected_files(self, selected_days: list):
     # Create the "data" folder if it doesn't exist
