@@ -6,16 +6,20 @@ def select_data_source():
   data_source_options = [
     {
       'type': 'list',
-      'message': 'Select the data source:',
+      'message': 'Select action:',
       'name': 'data_source',
       'choices': [
         {
-          'name': 'DataLake',
+          'name': 'Fetch data from datalake and compare it to MySQL.',
           'value': 'datalake'
         },
         {
-          'name': 'MySQL',
+          'name': 'Fetch data from MySQL and compare it to datalake.',
           'value': 'mysql'
+        },
+        {
+          'name': 'Delete stored downloaded data.',
+          'value': 'delete_data'
         }
       ]
     }
@@ -33,15 +37,15 @@ def select_testing_option(data_source):
       'name': 'testing_option',
       'choices': [
         {
-          'name': f'Check that primary keys in {data_source} correspond to the other data source',
+          'name': f'Check that primary keys in {data_source} correspond to the other data source.',
           'value': 'primary_keys'
         },
         {
-          'name': f'Check that all data in {data_source} correspond to the other data source',
+          'name': f'Check that all data in {data_source} correspond to the other data source.',
           'value': 'all_data'
         },
         {
-          'name': f'Check that the primary keys in {data_source} have no duplicates',
+          'name': f'Check that the primary keys in {data_source} have no duplicates.',
           'value': 'no_duplicates'
         }
       ]

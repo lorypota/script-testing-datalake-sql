@@ -4,7 +4,8 @@ from testing_settings_prompt import *
 import pyarrow.parquet as pq
 from tqdm import tqdm
 import pandas as pd
-
+import os
+import shutil
 
 def check_primary_keys(df, rows_to_check, table_name, primary_key_columns, sqlConnector, days_file_path):
   primary_keys_parquet = df[primary_key_columns].values.tolist()
@@ -55,8 +56,7 @@ def check_all_columns(df, rows_to_check, table_name, column_info, sqlConnector, 
 
 def process_files(sqlConnector, table_name, days, column_data, selected_num_rows, check_func):
   for days_file_path in tqdm(days, desc="Processing files"):
-    data_file_path = days_file_path[days_file_path.rfind("/") + 1 :]
-    table_parquet = pq.read_table('data/' + data_file_path)
+    table_parquet = pq.read_table('data/' + days_file_path)
     df = table_parquet.to_pandas()
     
     if selected_num_rows == 'all':
@@ -76,7 +76,7 @@ def process_datalake(selected_num_rows, check_func):
   sqlConnector = MySQLConnector()
   
   dlConnector.connect()
-  table_name, year, month, days = dlConnector.select_table_data()
+  table_name, _, _, days = dlConnector.select_table_data()
   dlConnector.download_selected_files(days)
   
   sqlConnector.connect()
@@ -88,9 +88,7 @@ def process_datalake(selected_num_rows, check_func):
   
   process_files(sqlConnector, table_name, days, column_data, selected_num_rows, check_func)
   
-  # Close connection and delete data folder
   sqlConnector.close_connection()
-  dlConnector.delete_data_folder()
 
 
 def pksDatalake(selected_num_rows):
@@ -116,8 +114,7 @@ def duplicatesDatalake():
   # Read all parquet files into a single DataFrame
   dfs = []
   for days_file_path in tqdm(days, desc="Reading files"):
-    data_file_path = days_file_path[days_file_path.rfind("/") + 1:]
-    table_parquet = pq.read_table('data/' + data_file_path)
+    table_parquet = pq.read_table('data/' + days_file_path)
     df = table_parquet.to_pandas()
     dfs.append(df)
 
@@ -132,9 +129,7 @@ def duplicatesDatalake():
   else:
     print("No duplicates found based on primary keys.")
 
-  # Close connection and delete data folder
   sqlConnector.close_connection()
-  dlConnector.delete_data_folder()
 
 
 def pksSQL(selected_num_rows):
@@ -166,8 +161,17 @@ def duplicatesSQL():
 def main():
   # Prompt user for data source and testing option
   selected_data_source = select_data_source()
-  selected_testing_option = select_testing_option(selected_data_source)
 
+  if selected_data_source == "delete_data":
+    if os.path.exists("data"):
+      shutil.rmtree("data")
+      print("Deleted the 'data' folder and its contents.")
+    else:
+      print("The 'data' folder does not exist.")
+    return
+
+  selected_testing_option = select_testing_option(selected_data_source)
+  
   if selected_data_source == 'datalake':
     if selected_testing_option == 'no_duplicates':
       duplicatesDatalake()

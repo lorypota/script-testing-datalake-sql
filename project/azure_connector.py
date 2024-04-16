@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from InquirerPy import inquirer
 from tqdm import tqdm
 import os
-import shutil
 from datetime import datetime, timedelta
 
 class DataLakeExplorer:
@@ -73,7 +72,7 @@ class DataLakeExplorer:
       selected_days = []
       current_date = start_date
       while current_date <= end_date:
-        file_path = f"{selected_table}/{selected_year}/{current_date.month:02d}/{current_date.day:02d}.parquet"
+        file_path = f"{selected_table}/{selected_year.split("/")[1]}/{current_date.month:02d}/{current_date.day:02d}.parquet"
         selected_days.append(file_path)
         current_date += timedelta(days=1)
 
@@ -87,24 +86,34 @@ class DataLakeExplorer:
     progress_bar = tqdm(total=total_files, unit="file")
 
     for day in selected_days:
-      progress_bar.set_description(f"Downloading {day}")
+      table_name, year, month, day_file = day.split("/")
+      day_file = day_file.split(".")[0]
 
+      # Create table, year and day folder if they don't exist
+      table_folder = f"data/{table_name}"
+      os.makedirs(table_folder, exist_ok=True)
+
+      year_folder = f"{table_folder}/{year}"
+      os.makedirs(year_folder, exist_ok=True)
+
+      month_folder = f"{year_folder}/{month}"
+      os.makedirs(month_folder, exist_ok=True)
+
+      progress_bar.set_description(f"Downloading {day}")
       file_client = self.file_system_client.get_file_client(day)
 
-      local_file_path = f"data/{day[day.rfind("/") + 1 :]}"
-      with open(local_file_path, "wb") as file_handle:
-        download = file_client.download_file()
-        download.readinto(file_handle)
+      local_file_path = f"{month_folder}/{day_file}.parquet"
+      if os.path.exists(local_file_path):
+        progress_bar.set_description(f"Skipping {day} (already downloaded)")
+      else:
+        progress_bar.set_description(f"Downloading {day}")
+        file_client = self.file_system_client.get_file_client(day)
+
+        with open(local_file_path, "wb") as file_handle:
+          download = file_client.download_file()
+          download.readinto(file_handle)
 
       progress_bar.update(1)
     
     progress_bar.close()
     print("All files downloaded successfully.")
-  
-  def delete_data_folder(self):
-    data_folder = "data"
-    if os.path.exists(data_folder):
-      shutil.rmtree(data_folder)
-      print("Deleted the 'data' folder and its contents.")
-    else:
-      print("The 'data' folder does not exist.")
