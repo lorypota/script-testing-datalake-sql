@@ -41,7 +41,9 @@ class DataLakeExplorer:
       selected_folder = inquirer.checkbox(
         message=message,
         choices=choices,
-        keybindings=keybindings
+        keybindings=keybindings,
+        validate=lambda result: len(result) > 0,
+        invalid_message="Please select at least one item."
       ).execute()
     elif type == 'list':
       selected_folder = inquirer.select(
