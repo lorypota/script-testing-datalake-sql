@@ -75,7 +75,8 @@ class DataLakeExplorer:
         file_path = f"{selected_table}/{selected_year.split("/")[1]}/{current_date.month:02d}/{current_date.day:02d}.parquet"
         selected_days.append(file_path)
         current_date += timedelta(days=1)
-
+    
+    print("\n")
     return selected_table, selected_year, selected_months, selected_days
   
   def download_selected_files(self, selected_days: list):

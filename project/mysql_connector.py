@@ -53,9 +53,17 @@ class MySQLConnector:
       print(f"Error retrieving primary key columns: {error}")
   
   def get_column_info(self, table_name):
-    query = f"DESCRIBE {table_name}"
-    column_info = self.execute_query(query)
-    return {row[0]: row[1] for row in column_info}
+    try:
+      if not self.connection or not self.connection.is_connected():
+        self.connect()
+      if self.cursor:
+        query = f"DESCRIBE {table_name}"
+        column_info = self.execute_query(query)
+        return {row[0]: row[1] for row in column_info}
+      else:
+        print("No cursor available. Please connect to the database first.")
+    except mysql.connector.Error as error:
+      print(f"Error retrieving column infos: {error}")
   
   def close_connection(self):
     if self.cursor:

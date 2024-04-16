@@ -6,6 +6,7 @@ from tqdm import tqdm
 import pandas as pd
 import os
 import shutil
+import pandasgui
 
 def check_primary_keys(df, rows_to_check, table_name, primary_key_columns, sqlConnector, days_file_path):
   primary_keys_parquet = df[primary_key_columns].values.tolist()
@@ -138,20 +139,121 @@ def pksSQL(selected_num_rows):
 
   dlConnector.connect()
   table_name, year, months, days = dlConnector.select_table_data()
-  year = year[year.rfind("/") + 1:]
 
-  print("Selected month: ")
-  for month in months:
-    print(f"Selected days of {month[month.rfind("/") + 1:]}: ")
-    for day in days:
-      if month in day:
-        print(day[day.rfind("/") + 1 : day.rfind(".")])
-    print("\n")
+  if len(days) < 3:
+    print("Select at least 3 days to study.")
+    return
+  
+  dlConnector.download_selected_files(days)
 
-  print("\n")
+  starting_date = days[1][days[1].find("/") + 1 : days[1].find(".")]
+  ending_date = days[len(days)-2][days[len(days)-2].find("/") + 1 : days[len(days)-2].rfind(".")]
+  print("Due to the selected files, the dates under consideration go from: ", starting_date, 
+        " to: ", ending_date, "\n")
+  
+  starting_date = starting_date.replace("/", "-")
+  ending_date = ending_date.replace("/", "-")
+  
+  primary_keys = sqlConnector.get_primary_key_columns(table_name)
+
+  if selected_num_rows != 'all':
+    limit = f"LIMIT {selected_num_rows}"
+  else:
+    limit = ""
+
+  query = f"SELECT {",".join(primary_keys)} FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
+  print("Getting data from MySQL.")
+  results = sqlConnector.execute_query(query)
+  print("Fetched data from MySQL. \n")
+
+  # Save results of MySQL in DataFrame
+  df_MySQL = pd.DataFrame(results, columns=[column[0] for column in sqlConnector.cursor.description])
+
+  # Read all parquet files into a single DataFrame
+  dfs_datalake = []
+  for days_file_path in tqdm(days, desc="Reading files"):
+    parquet_file = pq.ParquetFile('data/' + days_file_path)
+    df = parquet_file.read(columns=primary_keys).to_pandas()
+    dfs_datalake.append(df)
+  df_datalake = pd.concat(dfs_datalake, ignore_index=True)
+  print("Data from datalake has been loaded.\n")
+
+  # pandasgui.show(df_MySQL, df_datalake)
+
+  # Check if all rows from df_MySQL are present in df_datalake
+  all_present = df_MySQL.set_index(primary_keys).index.isin(df_datalake.set_index(primary_keys).index).all()
+
+  if all_present:
+    print("All rows from df_MySQL are present in df_datalake")
+  else:
+    print("Some rows from df_MySQL are missing in df_datalake")
+    
+    # Get the missing rows
+    missing_rows = df_MySQL[~df_MySQL.set_index(primary_keys).index.isin(df_datalake.set_index(primary_keys).index)]
+    print("Missing rows:")
+    print(missing_rows)
+
 
 def allDataSQL(selected_num_rows):
-  pass
+  dlConnector = DataLakeExplorer()
+  sqlConnector = MySQLConnector()
+
+  dlConnector.connect()
+  table_name, year, months, days = dlConnector.select_table_data()
+
+  if len(days) < 3:
+    print("Select at least 3 days to study.")
+    return
+
+  dlConnector.download_selected_files(days)
+
+  starting_date = days[1][days[1].find("/") + 1: days[1].find(".")]
+  ending_date = days[len(days) - 2][days[len(days) - 2].find("/") + 1: days[len(days) - 2].rfind(".")]
+  print("Due to the selected files, the dates under consideration go from:", starting_date,
+        "to:", ending_date, "\n")
+
+  starting_date = starting_date.replace("/", "-")
+  ending_date = ending_date.replace("/", "-")
+
+  # Get all columns from the table
+  all_columns = sqlConnector.get_column_info(table_name)
+
+  if selected_num_rows != 'all':
+    limit = f"LIMIT {selected_num_rows}"
+  else:
+    limit = ""
+
+  query = f"SELECT * FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
+  print("Getting data from MySQL.")
+  results = sqlConnector.execute_query(query)
+  print("Fetched data from MySQL.\n")
+
+  # Save results of MySQL in DataFrame
+  df_MySQL = pd.DataFrame(results, columns=[column[0] for column in sqlConnector.cursor.description])
+
+  # Read all parquet files into a single DataFrame
+  dfs_datalake = []
+  for days_file_path in tqdm(days, desc="Reading files"):
+    parquet_file = pq.ParquetFile('data/' + days_file_path)
+    df = parquet_file.read(columns=all_columns).to_pandas()
+    dfs_datalake.append(df)
+  df_datalake = pd.concat(dfs_datalake, ignore_index=True)
+  print("Data from datalake has been loaded.\n")
+
+  pandasgui.show(df_MySQL, df_datalake)
+
+  # Check if all rows from df_MySQL are present in df_datalake
+  all_present = df_MySQL.equals(df_datalake)
+
+  if all_present:
+    print("All rows from df_MySQL are present in df_datalake")
+  else:
+    print("Some rows from df_MySQL are missing or different in df_datalake")
+
+    # Get the missing or different rows
+    missing_rows = df_MySQL[~df_MySQL.apply(tuple, 1).isin(df_datalake.apply(tuple, 1))]
+    print("Missing or different rows:")
+    print(missing_rows)
 
 
 def duplicatesSQL():
