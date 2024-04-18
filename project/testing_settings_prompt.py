@@ -43,14 +43,16 @@ def select_testing_option(data_source):
         {
           'name': f'Check that all data in {data_source} correspond to the other data source.',
           'value': 'all_data'
-        },
-        {
-          'name': f'Check that the primary keys in {data_source} have no duplicates.',
-          'value': 'no_duplicates'
         }
       ]
     }
   ]
+
+  if data_source == 'datalake':
+    testing_options[0]['choices'].append({
+      'name': 'Check that the primary keys in datalake have no duplicates.',
+      'value': 'no_duplicates'
+    })
 
   selected_option = prompt(testing_options)['testing_option']
   return selected_option

@@ -20,21 +20,18 @@ def main():
   
   if selected_data_source == 'datalake':
     if selected_testing_option == 'no_duplicates':
-      duplicates_datalake()
+      check_duplicates_datalake()
     else:
       if selected_testing_option == 'primary_keys':
-        pks_datalake()
+        compare_primary_keys_datalake()
       elif selected_testing_option == 'all_data':
-        all_data_datalake()
+        compare_all_data_datalake()
   else: #datasource is SQL
-    if selected_testing_option == 'no_duplicates':
-      duplicates_sql()
-    else:
-      selected_num_rows = select_rows_number()
-      if selected_testing_option == 'primary_keys':
-        pks_sql(selected_num_rows)
-      elif selected_testing_option == 'all_data':
-        all_data_sql(selected_num_rows)
+    selected_num_rows = select_rows_number()
+    if selected_testing_option == 'primary_keys':
+      compare_primary_keys_sql(selected_num_rows)
+    elif selected_testing_option == 'all_data':
+      compare_all_data_sql(selected_num_rows)
 
 
 if __name__ == '__main__':

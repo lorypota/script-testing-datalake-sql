@@ -4,29 +4,27 @@ import pandasgui
 import pyarrow.parquet as pq
 from tqdm import tqdm
 import pandas as pd
-import pyarrow.parquet as pq
-from tqdm import tqdm
 import os
 
 # Constants
 DATA_FOLDER = 'data/'
 
 
-def establish_connection_datalake():
-  dl_connector = DataLakeExplorer()
-  dl_connector.connect()
-  return dl_connector
+def establish_datalake_connection():
+  datalake_connector = DataLakeExplorer()
+  datalake_connector.connect()
+  return datalake_connector
 
 
-def estabilish_connection_sql():
+def establish_sql_connection():
   sql_connector = MySQLConnector()
   sql_connector.connect()
   return sql_connector
 
 
-def select_and_download_data(dl_connector: DataLakeExplorer) -> tuple:
-  table_name, year, month, days = dl_connector.select_table_data()
-  dl_connector.download_selected_files(days)
+def select_and_download_data(datalake_connector: DataLakeExplorer) -> tuple:
+  table_name, year, month, days = datalake_connector.select_table_data()
+  datalake_connector.download_selected_files(days)
   return table_name, year, month, days
 
 
@@ -34,29 +32,29 @@ def fetch_mysql_data(sql_connector: MySQLConnector, query: str) -> pd.DataFrame:
   print("Getting data from MySQL.")
   results = sql_connector.execute_query(query)
   print("Fetched data from MySQL.")
-  df_mysql = pd.DataFrame(results, columns=[column[0] for column in sql_connector.cursor.description])
-  return df_mysql
+  mysql_df = pd.DataFrame(results, columns=[column[0] for column in sql_connector.cursor.description])
+  return mysql_df
 
 
 def convert_unhashable(value):
-    if isinstance(value, bytearray):
-        return bytes(value)
-    return value
+  if isinstance(value, bytearray):
+    return bytes(value)
+  return value
 
 
 def read_parquet_files(days: list, columns: list = None) -> pd.DataFrame:
-  dfs_datalake = []
-  for days_file_path in tqdm(days, desc="Reading files"):
-    if os.path.getsize(DATA_FOLDER + days_file_path) == 0:
-      print(f"The file {days_file_path} is empty. Skipping...")
+  datalake_dfs = []
+  for day_file_path in tqdm(days, desc="Reading files"):
+    if os.path.getsize(DATA_FOLDER + day_file_path) == 0:
+      print(f"The file {day_file_path} is empty. Skipping...")
     else:
-      parquet_file = pq.ParquetFile(DATA_FOLDER + days_file_path)
+      parquet_file = pq.ParquetFile(DATA_FOLDER + day_file_path)
       df = parquet_file.read(columns=columns).to_pandas()
-      dfs_datalake.append(df)
-  df_datalake = pd.concat(dfs_datalake, ignore_index=True)
-  df_datalake = df_datalake.map(convert_unhashable)
+      datalake_dfs.append(df)
+  datalake_df = pd.concat(datalake_dfs, ignore_index=True)
+  datalake_df = datalake_df.map(convert_unhashable)
   print("Data from datalake has been loaded.")
-  return df_datalake
+  return datalake_df
 
 
 def check_subset(df1: pd.DataFrame, df2: pd.DataFrame, comparison_columns: list) -> None:
@@ -71,20 +69,20 @@ def check_subset(df1: pd.DataFrame, df2: pd.DataFrame, comparison_columns: list)
     print(missing_rows)
 
 
-def pks_datalake() -> None:
-  dl_connector = establish_connection_datalake()
+def compare_primary_keys_datalake() -> None:
+  datalake_connector = establish_datalake_connection()
 
-  table_name, year, month, days = select_and_download_data(dl_connector)
+  table_name, year, month, days = select_and_download_data(datalake_connector)
 
-  sql_connector = estabilish_connection_sql()
+  sql_connector = establish_sql_connection()
 
   primary_key_columns = sql_connector.get_primary_key_columns(table_name)
   print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
 
-  df_datalake = read_parquet_files(days, columns=primary_key_columns)
-  df_datalake.name = "Datalake"
-  min_values = df_datalake[primary_key_columns].min().tolist()
-  max_values = df_datalake[primary_key_columns].max().tolist()
+  datalake_df = read_parquet_files(days, columns=primary_key_columns)
+  datalake_df.name = "Datalake"
+  min_values = datalake_df[primary_key_columns].min().tolist()
+  max_values = datalake_df[primary_key_columns].max().tolist()
   
   conditions = []
   for i, primary_key in enumerate(primary_key_columns):
@@ -93,31 +91,31 @@ def pks_datalake() -> None:
 
   query = f"SELECT {', '.join(primary_key_columns)} FROM {table_name} WHERE {conditions_str}"
 
-  df_mysql = fetch_mysql_data(sql_connector, query)
-  df_mysql.name = "MySQL"
+  mysql_df = fetch_mysql_data(sql_connector, query)
+  mysql_df.name = "MySQL"
 
-  check_subset(df_datalake, df_mysql, primary_key_columns)
+  check_subset(datalake_df, mysql_df, primary_key_columns)
 
-  pandasgui.show(df_mysql, df_datalake)
+  pandasgui.show(mysql_df, datalake_df)
 
   # Close connection
   sql_connector.close_connection()
 
 
-def all_data_datalake() -> None:
-  dl_connector = establish_connection_datalake()
+def compare_all_data_datalake() -> None:
+  datalake_connector = establish_datalake_connection()
 
-  table_name, year, month, days = select_and_download_data(dl_connector)
+  table_name, year, month, days = select_and_download_data(datalake_connector)
 
-  sql_connector = estabilish_connection_sql()
+  sql_connector = establish_sql_connection()
   primary_key_columns = sql_connector.get_primary_key_columns(table_name)
   print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
   all_columns = sql_connector.get_column_info(table_name)
 
-  df_datalake = read_parquet_files(days, columns=all_columns)
-  df_datalake.name = "Datalake"
-  min_values = df_datalake[primary_key_columns].min().tolist()
-  max_values = df_datalake[primary_key_columns].max().tolist()
+  datalake_df = read_parquet_files(days, columns=all_columns)
+  datalake_df.name = "Datalake"
+  min_values = datalake_df[primary_key_columns].min().tolist()
+  max_values = datalake_df[primary_key_columns].max().tolist()
   
 
   conditions = []
@@ -126,24 +124,24 @@ def all_data_datalake() -> None:
   conditions_str = " AND ".join(conditions)
 
   query = f"SELECT * FROM {table_name} WHERE {conditions_str}"
-  df_mysql = fetch_mysql_data(sql_connector, query)
-  df_mysql = df_mysql.map(convert_unhashable)
-  df_mysql.name = "MySQL"
+  mysql_df = fetch_mysql_data(sql_connector, query)
+  mysql_df = mysql_df.map(convert_unhashable)
+  mysql_df.name = "MySQL"
 
-  check_subset(df_datalake, df_mysql, list(all_columns.keys()))
+  check_subset(datalake_df, mysql_df, list(all_columns.keys()))
 
-  pandasgui.show(df_mysql, df_datalake)
+  pandasgui.show(mysql_df, datalake_df)
 
   # Close connection
   sql_connector.close_connection()
 
 
-def duplicates_datalake() -> None:
-  dl_connector = establish_connection_datalake()
+def check_duplicates_datalake() -> None:
+  datalake_connector = establish_datalake_connection()
 
-  table_name, year, month, days = select_and_download_data(dl_connector)
+  table_name, year, month, days = select_and_download_data(datalake_connector)
 
-  sql_connector = estabilish_connection_sql()
+  sql_connector = establish_sql_connection()
 
   primary_key_columns = sql_connector.get_primary_key_columns(table_name)
   print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
@@ -173,53 +171,53 @@ def get_date_range(days: list) -> tuple:
   return starting_date, ending_date
 
 
-def pks_sql(selected_num_rows: int) -> None:
-  dl_connector = DataLakeExplorer()
+def compare_primary_keys_sql(selected_num_rows: int) -> None:
+  datalake_connector = DataLakeExplorer()
   sql_connector = MySQLConnector()
 
-  dl_connector.connect()
-  table_name, year, months, days = dl_connector.select_table_data()
+  datalake_connector.connect()
+  table_name, year, months, days = datalake_connector.select_table_data()
 
   if len(days) < 3:
     print("Select at least 3 days to study.")
     return
   
-  dl_connector.download_selected_files(days)
+  datalake_connector.download_selected_files(days)
 
   starting_date, ending_date = get_date_range(days)
   
   primary_keys = sql_connector.get_primary_key_columns(table_name)
 
-  df_datalake = read_parquet_files(days, columns=primary_keys)
-  df_datalake.name = "Datalake"
+  datalake_df = read_parquet_files(days, columns=primary_keys)
+  datalake_df.name = "Datalake"
 
   if selected_num_rows != 'all':
     limit = f"LIMIT {selected_num_rows}"
   else:
     limit = ""
 
-  query = f"SELECT {",".join(primary_keys)} FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
+  query = f"SELECT {','.join(primary_keys)} FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
 
-  df_mysql = fetch_mysql_data(sql_connector, query)
-  df_mysql.name = "MySQL"
+  mysql_df = fetch_mysql_data(sql_connector, query)
+  mysql_df.name = "MySQL"
 
-  # pandasgui.show(df_mysql, df_datalake)
+  # pandasgui.show(mysql_df, datalake_df)
 
-  check_subset(df_mysql, df_datalake, primary_keys)
+  check_subset(mysql_df, datalake_df, primary_keys)
 
 
-def all_data_sql(selected_num_rows: int) -> None:
-  dl_connector = DataLakeExplorer()
+def compare_all_data_sql(selected_num_rows: int) -> None:
+  datalake_connector = DataLakeExplorer()
   sql_connector = MySQLConnector()
 
-  dl_connector.connect()
-  table_name, year, months, days = dl_connector.select_table_data()
+  datalake_connector.connect()
+  table_name, year, months, days = datalake_connector.select_table_data()
 
   if len(days) < 3:
     print("Select at least 3 days to study.")
     return
   
-  dl_connector.download_selected_files(days)
+  datalake_connector.download_selected_files(days)
 
   starting_date, ending_date = get_date_range(days)
 
@@ -233,16 +231,12 @@ def all_data_sql(selected_num_rows: int) -> None:
 
   query = f"SELECT * FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
 
-  df_mysql = fetch_mysql_data(sql_connector, query)
-  df_mysql.name = "MySQL"
+  mysql_df = fetch_mysql_data(sql_connector, query)
+  mysql_df.name = "MySQL"
 
-  df_datalake = read_parquet_files(days, columns=all_columns)
-  df_datalake.name = "Datalake"
+  datalake_df = read_parquet_files(days, columns=all_columns)
+  datalake_df.name = "Datalake"
 
-  # pandasgui.show(df_MySQL, df_datalake)
+  # pandasgui.show(mysql_df, datalake_df)
 
-  check_subset(df_mysql, df_datalake, list(all_columns.keys()))
-
-
-def duplicates_sql():
-  pass
+  check_subset(mysql_df, datalake_df, list(all_columns.keys()))
