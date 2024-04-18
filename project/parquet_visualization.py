@@ -5,6 +5,6 @@ import os
 
 print(os.getcwd())
 
-table = pq.read_table('data/01.parquet')
+table = pq.read_table('data/matomo_log_link_visit_action/2024/04/04.parquet')
 df = table.to_pandas()
 pandasgui.show(df)

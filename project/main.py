@@ -22,11 +22,10 @@ def main():
     if selected_testing_option == 'no_duplicates':
       duplicates_datalake()
     else:
-      selected_num_rows = select_rows_number()
       if selected_testing_option == 'primary_keys':
-        pks_datalake(selected_num_rows)
+        pks_datalake()
       elif selected_testing_option == 'all_data':
-        all_data_datalake(selected_num_rows)
+        all_data_datalake()
   else: #datasource is SQL
     if selected_testing_option == 'no_duplicates':
       duplicates_sql()
