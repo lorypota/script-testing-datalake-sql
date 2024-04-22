@@ -46,7 +46,7 @@ def read_parquet_files(days: list, columns: list = None) -> pd.DataFrame:
   datalake_dfs = []
   for day_file_path in tqdm(days, desc="Reading files"):
     if os.path.getsize(DATA_FOLDER + day_file_path) == 0:
-      print(f"The file {day_file_path} is empty. Skipping...")
+      print(f"\nThe file {day_file_path} is empty. Skipping...")
     else:
       parquet_file = pq.ParquetFile(DATA_FOLDER + day_file_path)
       df = parquet_file.read(columns=columns).to_pandas()
@@ -69,97 +69,65 @@ def check_subset(df1: pd.DataFrame, df2: pd.DataFrame, comparison_columns: list)
     print(missing_rows)
 
 
-def compare_primary_keys_datalake() -> None:
+def compare_data_datalake(compare_type: str) -> None:
   datalake_connector = establish_datalake_connection()
-
-  table_name, year, month, days = select_and_download_data(datalake_connector)
+  table_name, _, _, days = select_and_download_data(datalake_connector)
 
   sql_connector = establish_sql_connection()
-
   primary_key_columns = sql_connector.get_primary_key_columns(table_name)
   print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
 
-  datalake_df = read_parquet_files(days, columns=primary_key_columns)
+  if compare_type == 'primary_keys':
+    columns = primary_key_columns
+  elif compare_type == 'all_data' or compare_type == 'check_duplicates':
+    columns = sql_connector.get_column_info(table_name)
+  else:
+    raise ValueError("Invalid compare_type. Must be 'primary_keys' or 'all_data'.")
+
+  datalake_df = read_parquet_files(days, columns=columns)
   datalake_df.name = "Datalake"
-  min_values = datalake_df[primary_key_columns].min().tolist()
-  max_values = datalake_df[primary_key_columns].max().tolist()
-  
-  conditions = []
-  for i, primary_key in enumerate(primary_key_columns):
-    conditions.append(f"{primary_key} BETWEEN {min_values[i]} AND {max_values[i]}")
-  conditions_str = " AND ".join(conditions)
 
-  query = f"SELECT {', '.join(primary_key_columns)} FROM {table_name} WHERE {conditions_str}"
+  if compare_type != 'check_duplicates':
+    min_values = datalake_df[primary_key_columns].min().tolist()
+    max_values = datalake_df[primary_key_columns].max().tolist()
 
-  mysql_df = fetch_mysql_data(sql_connector, query)
-  mysql_df.name = "MySQL"
+    conditions = []
+    for i, primary_key in enumerate(primary_key_columns):
+      conditions.append(f"{primary_key} BETWEEN {min_values[i]} AND {max_values[i]}")
+    conditions_str = " AND ".join(conditions)
 
-  check_subset(datalake_df, mysql_df, primary_key_columns)
+    if compare_type == 'primary_keys':
+      query = f"SELECT {', '.join(columns)} FROM {table_name} WHERE {conditions_str}"
+    else:
+      query = f"SELECT * FROM {table_name} WHERE {conditions_str}"
+    mysql_df = fetch_mysql_data(sql_connector, query)
+    mysql_df = mysql_df.map(convert_unhashable)
+    mysql_df.name = "MySQL"
 
-  pandasgui.show(mysql_df, datalake_df)
+    check_subset(datalake_df, mysql_df, list(columns))
+    pandasgui.show(mysql_df, datalake_df)
+  else:
+    duplicates = datalake_df[datalake_df.duplicated(subset=primary_key_columns, keep=False)]
+    if len(duplicates) > 0:
+      print(f"Duplicates found based on primary keys: {', '.join(primary_key_columns)}")
+      print(duplicates)
+    else:
+      print("No duplicates found based on primary keys.")
+    pandasgui.show(datalake_df)
 
-  # Close connection
   sql_connector.close_connection()
+
+
+def compare_primary_keys_datalake() -> None:
+  compare_data_datalake('primary_keys')
 
 
 def compare_all_data_datalake() -> None:
-  datalake_connector = establish_datalake_connection()
-
-  table_name, year, month, days = select_and_download_data(datalake_connector)
-
-  sql_connector = establish_sql_connection()
-  primary_key_columns = sql_connector.get_primary_key_columns(table_name)
-  print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
-  all_columns = sql_connector.get_column_info(table_name)
-
-  datalake_df = read_parquet_files(days, columns=all_columns)
-  datalake_df.name = "Datalake"
-  min_values = datalake_df[primary_key_columns].min().tolist()
-  max_values = datalake_df[primary_key_columns].max().tolist()
-  
-
-  conditions = []
-  for i, primary_key in enumerate(primary_key_columns):
-    conditions.append(f"{primary_key} BETWEEN {min_values[i]-1} AND {max_values[i]+1}")
-  conditions_str = " AND ".join(conditions)
-
-  query = f"SELECT * FROM {table_name} WHERE {conditions_str}"
-  mysql_df = fetch_mysql_data(sql_connector, query)
-  mysql_df = mysql_df.map(convert_unhashable)
-  mysql_df.name = "MySQL"
-
-  check_subset(datalake_df, mysql_df, list(all_columns.keys()))
-
-  pandasgui.show(mysql_df, datalake_df)
-
-  # Close connection
-  sql_connector.close_connection()
+  compare_data_datalake('all_data')
 
 
 def check_duplicates_datalake() -> None:
-  datalake_connector = establish_datalake_connection()
-
-  table_name, year, month, days = select_and_download_data(datalake_connector)
-
-  sql_connector = establish_sql_connection()
-
-  primary_key_columns = sql_connector.get_primary_key_columns(table_name)
-  print('Found primary keys: ' + ', '.join(primary_key_columns) + '\n')
-
-  combined_df = read_parquet_files(days, columns=primary_key_columns)
-
-  pandasgui.show(combined_df)
-
-  # Check for duplicates based on primary key columns
-  duplicates = combined_df[combined_df.duplicated(subset=primary_key_columns, keep=False)]
-
-  if len(duplicates) > 0:
-    print(f"Duplicates found based on primary keys: {', '.join(primary_key_columns)}")
-    print(duplicates)
-  else:
-    print("No duplicates found based on primary keys.")
-
-  sql_connector.close_connection()
+  compare_data_datalake('check_duplicates')
 
 
 def get_date_range(days: list) -> tuple:
@@ -171,12 +139,12 @@ def get_date_range(days: list) -> tuple:
   return starting_date, ending_date
 
 
-def compare_primary_keys_sql(selected_num_rows: int) -> None:
+def compare_data_sql(compare_type: str, selected_num_rows: int) -> None:
   datalake_connector = DataLakeExplorer()
   sql_connector = MySQLConnector()
 
   datalake_connector.connect()
-  table_name, year, months, days = datalake_connector.select_table_data()
+  table_name, _, _, days = datalake_connector.select_table_data()
 
   if len(days) < 3:
     print("Select at least 3 days to study.")
@@ -186,9 +154,14 @@ def compare_primary_keys_sql(selected_num_rows: int) -> None:
 
   starting_date, ending_date = get_date_range(days)
   
-  primary_keys = sql_connector.get_primary_key_columns(table_name)
+  if compare_type == 'primary_keys':
+    columns = sql_connector.get_primary_key_columns(table_name)
+  elif compare_type == 'all_data':
+    columns = sql_connector.get_column_info(table_name)
+  else:
+    raise ValueError("Invalid compare_type. Must be 'primary_keys' or 'all_data'.")
 
-  datalake_df = read_parquet_files(days, columns=primary_keys)
+  datalake_df = read_parquet_files(days, columns=columns)
   datalake_df.name = "Datalake"
 
   if selected_num_rows != 'all':
@@ -196,47 +169,25 @@ def compare_primary_keys_sql(selected_num_rows: int) -> None:
   else:
     limit = ""
 
-  query = f"SELECT {','.join(primary_keys)} FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
+  query = f"SELECT {','.join(columns)} FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
 
   mysql_df = fetch_mysql_data(sql_connector, query)
   mysql_df.name = "MySQL"
 
-  # pandasgui.show(mysql_df, datalake_df)
+  check_subset(mysql_df, datalake_df, columns)
+  pandasgui.show(mysql_df, datalake_df)
 
-  check_subset(mysql_df, datalake_df, primary_keys)
+
+def compare_primary_keys_sql(selected_num_rows: int) -> None:
+  compare_data_sql('primary_keys', selected_num_rows)
 
 
 def compare_all_data_sql(selected_num_rows: int) -> None:
-  datalake_connector = DataLakeExplorer()
-  sql_connector = MySQLConnector()
+  compare_data_sql('all_data', selected_num_rows)
 
-  datalake_connector.connect()
-  table_name, year, months, days = datalake_connector.select_table_data()
-
-  if len(days) < 3:
-    print("Select at least 3 days to study.")
-    return
-  
-  datalake_connector.download_selected_files(days)
-
-  starting_date, ending_date = get_date_range(days)
-
-  # Get all columns from the table
-  all_columns = sql_connector.get_column_info(table_name)
-
-  if selected_num_rows != 'all':
-    limit = f"LIMIT {selected_num_rows}"
-  else:
-    limit = ""
-
-  query = f"SELECT * FROM {table_name} WHERE server_time BETWEEN '{starting_date}' AND '{ending_date}' {limit}"
-
+def test():
+  sql_connector = establish_sql_connection()
+  query = "SELECT * FROM matomo_archive_numeric_2024_04 ORDER BY ts_archived DESC"
   mysql_df = fetch_mysql_data(sql_connector, query)
-  mysql_df.name = "MySQL"
-
-  datalake_df = read_parquet_files(days, columns=all_columns)
-  datalake_df.name = "Datalake"
-
-  # pandasgui.show(mysql_df, datalake_df)
-
-  check_subset(mysql_df, datalake_df, list(all_columns.keys()))
+  mysql_df = mysql_df.map(convert_unhashable)
+  pandasgui.show(mysql_df)

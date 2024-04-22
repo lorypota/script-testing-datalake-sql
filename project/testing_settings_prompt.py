@@ -18,6 +18,10 @@ def select_data_source():
           'value': 'mysql'
         },
         {
+          'name': 'test',
+          'value': 'test'
+        },
+        {
           'name': 'Delete stored downloaded data.',
           'value': 'delete_data'
         }

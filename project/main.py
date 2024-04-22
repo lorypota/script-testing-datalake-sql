@@ -15,9 +15,12 @@ def main():
     else:
       print("The 'data' folder does not exist.")
     return
+  
+  if selected_data_source == 'test':
+    test()
+    return
 
   selected_testing_option = select_testing_option(selected_data_source)
-  
   if selected_data_source == 'datalake':
     if selected_testing_option == 'no_duplicates':
       check_duplicates_datalake()

@@ -5,7 +5,7 @@ This script provides a CLI interface for testing data stored in a data lake stor
 Setup:
 
     Place the .env file in the project root directory
-    Install the required packages (recommended usage of a virtual environment): pip install -r requirements.txt
+    Install the required packages: pip install -r requirements.txt
 
 Usage:
 
